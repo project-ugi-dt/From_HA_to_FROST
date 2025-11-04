@@ -58,9 +58,120 @@
 
 **Thing** – это «объект наблюдения», то есть любая сущность, с которой связаны сенсоры. В нашем случае это метеостанция (GW2000 или GW3000).
 
-**Функции**:
-- Упрощает управление несколькими метеостанциями (каждая станция = отдельный Thing)
-- Позволяет хранить метаданные: местоположение, серийный номер, привязка к Raspberry Pi и т.д.
-- В дальнейшем именно к Thing будут привязываться все датчики и потоки данных
-
 **Тип запроса и адрес**: 
+```bash
+POST http://<адрес_сервера>:8080/FROST-Server/v1.1/Things
+```
+**Headers**:
+Content-Type: application/json
+
+**Body**:
+```bash
+json
+{
+  "name": "Метеостанция GW2000",
+  "description": "Wi-Fi шлюз Ecowitt GW2000, подключенный к Home Assistant",
+  "properties": {
+    "location": "Raspberry Pi 5, Москва"
+  }
+}
+```
+**Sensor**
+Sensor описывает устройство измерения. Например, при наличии одной метеостанции, у неё могут быть десятки сенсоров (температура, влажность, давление, PM2.5 и т.д.). Каждый датчик фиксируется как отдельный Sensor.
+Тип запроса и адрес:
+```bash
+POST http://<адрес_сервера>:8080/FROST-Server/v1.1/Sensors
+```
+Headers:
+Content-Type: application/json
+**Body:**
+```bash
+{
+  "name": "Температурный датчик WH32",
+  "description": "Датчик температуры и влажности воздуха Ecowitt",
+  "encodingType": "application/pdf",
+  "metadata": "https://www.ecowitt.com/weather_station/wh32"
+}
+```
+ObservedProperty описывает само физическое явление, которое измеряется: температура, влажность, давление, скорость ветра. Оно абстрактное и не зависит от конкретного датчика.
+Тип запроса и адрес:
+```bash
+POST http://<адрес_сервера>:8080/FROST-Server/v1.1/ObservedProperties
+```
+**Headers:**
+```bash
+Content-Type: application/json
+```
+**Body:**
+```bash
+{
+  "name": "Температура воздуха",
+  "definition": "http://dbpedia.org/page/Temperature",
+  "description": "Измерение температуры воздуха в градусах Цельсия"
+}
+```
+**Datastream**
+Datastream — это связка Thing + Sensor + ObservedProperty. То есть «какая метеостанция каким датчиком измеряет какое свойство». Без Datastream невозможно передавать измерения.
+Тип запроса и адрес:
+```bash
+POST http://<адрес_сервера>:8080/FROST-Server/v1.1/Datastreams
+```
+**Headers:**
+```bash
+Content-Type: application/json
+```
+**Body:**
+```bash
+{
+  "name": "Поток температуры",
+  "description": "Непрерывные измерения температуры воздуха",
+  "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement",
+  "unitOfMeasurement": {
+    "name": "Градусы Цельсия",
+    "symbol": "°C",
+    "definition": "http://unitsofmeasure.org/ucum.html#para-30"
+  },
+  "Thing": {"@iot.id": 1},
+  "Sensor": {"@iot.id": 1},
+  "ObservedProperty": {"@iot.id": 1}
+}
+```
+**Observation (наблюдения)**
+Данный запрос проверяет корректность работы сущности (Thing, Sensor, ObservedProperty, Datastream); соответствие структуры данных стандарту OGC SensorThings API; корректность приема и сохранения данных сервером FROST.
+Тип запроса и адрес:
+```bash
+POST http://<адрес_сервера>:8080/FROST-Server/v1.1/Observations
+```
+**Headers:**
+```bash
+Content-Type: application/json
+```
+**Body:**
+```bash
+{
+  "phenomenonTime": "2025-10-03T15:00:00Z",
+  "result": 12.3,
+  "Datastream": {"@iot.id": 1}
+}
+```
+## Автоматизация отправки данных с Home Assistant на сервер FROST
+
+После настройки базовых сущностей через Postman необходимо настроить автоматическую отправку данных с Home Assistant на сервер FROST.
+
+### Настройка Home Assistant
+
+#### 1. Установка File Editor
+
+Для редактирования конфигурационных файлов Home Assistant необходимо установить дополнение File Editor:
+
+1. Перейдите в **Настройки → Дополнения → Магазин дополнений**
+2. Найдите и установите **File Editor**
+3. Запустите дополнение через веб-интерфейс
+
+#### 2. Настройка configuration.yaml
+
+В файле `configuration.yaml` добавьте в конец следующую строку:
+
+```yaml
+rest_command: !include rest_command.yaml
+automation: !include automations.yaml
