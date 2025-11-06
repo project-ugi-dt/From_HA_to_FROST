@@ -171,7 +171,9 @@ Content-Type: application/json
 rest_command: !include rest_command.yaml
 automation: !include automations.yaml
 
- ### 3. Создание файла rest_command.yaml
+#### 3. Создание файла rest_command.yaml
+
+
 Далее необходимо создать новый файл, "rest_command.yaml" и добавить в него следующие команды:
 ```bash
 send_temperature:
