@@ -167,10 +167,11 @@ Content-Type: application/json
 
 В файле `configuration.yaml` добавить в конец следующую строку:
 
-```yaml
+```bash
+yaml
 rest_command: !include rest_command.yaml
 automation: !include automations.yaml
-
+```
 #### 3. Создание файла rest_command.yaml
 
 
@@ -194,6 +195,7 @@ send_temperature:
       }
     }
 ```
+
 ### 4. Настройка automations.yaml
 В файл automations.yaml добавить автоматизацию:
 ```bash
