@@ -54,8 +54,6 @@
 
 ## Добавление сущностей
 
-### Thing
-
 **Thing** – это «объект наблюдения», то есть любая сущность, с которой связаны сенсоры. В нашем случае это метеостанция (GW2000 или GW3000).
 
 **Тип запроса и адрес**: 
@@ -76,8 +74,7 @@ json
   }
 }
 ```
-**Sensor**
-Sensor описывает устройство измерения. Например, при наличии одной метеостанции, у неё могут быть десятки сенсоров (температура, влажность, давление, PM2.5 и т.д.). Каждый датчик фиксируется как отдельный Sensor.
+**Sensor** описывает устройство измерения. Например, при наличии одной метеостанции, у неё могут быть десятки сенсоров (температура, влажность, давление, PM2.5 и т.д.). Каждый датчик фиксируется как отдельный Sensor.
 Тип запроса и адрес:
 ```bash
 POST http://<адрес_сервера>:8080/FROST-Server/v1.1/Sensors
@@ -110,8 +107,7 @@ Content-Type: application/json
   "description": "Измерение температуры воздуха в градусах Цельсия"
 }
 ```
-**Datastream**
-Datastream — это связка Thing + Sensor + ObservedProperty. То есть «какая метеостанция каким датчиком измеряет какое свойство». Без Datastream невозможно передавать измерения.
+**Datastream** — это связка Thing + Sensor + ObservedProperty. То есть «какая метеостанция каким датчиком измеряет какое свойство». Без Datastream невозможно передавать измерения.
 Тип запроса и адрес:
 ```bash
 POST http://<адрес_сервера>:8080/FROST-Server/v1.1/Datastreams
@@ -136,8 +132,7 @@ Content-Type: application/json
   "ObservedProperty": {"@iot.id": 1}
 }
 ```
-**Observation (наблюдения)**
-Данный запрос проверяет корректность работы сущности (Thing, Sensor, ObservedProperty, Datastream); соответствие структуры данных стандарту OGC SensorThings API; корректность приема и сохранения данных сервером FROST.
+**Observation (наблюдения)** - Данный запрос проверяет корректность работы сущности (Thing, Sensor, ObservedProperty, Datastream); соответствие структуры данных стандарту OGC SensorThings API; корректность приема и сохранения данных сервером FROST.
 Тип запроса и адрес:
 ```bash
 POST http://<адрес_сервера>:8080/FROST-Server/v1.1/Observations
@@ -175,3 +170,69 @@ Content-Type: application/json
 ```yaml
 rest_command: !include rest_command.yaml
 automation: !include automations.yaml
+
+ ### 3. Создание файла rest_command.yaml
+Далее необходимо создать новый файл, "rest_command.yaml" и добавить в него следующие команды:
+```bash
+send_temperature:
+  url: "http://90.156.134.128:8080/FROST-Server/v1.1/Observations"
+  method: POST
+  headers:
+    Content-Type: "application/json"
+  payload: >
+    {
+      "phenomenonTime": "{{ utcnow().strftime('%Y-%m-%dT%H:%M:%SZ') }}",
+      "result": {{ states("sensor.gw2000c_feels_like_temperature") | float(0) }},
+      "Datastream": { "@iot.id": 1 },
+      "FeatureOfInterest": {
+        "name": "gw2000-spot",
+        "description": "Автосозданный FoI",
+        "encodingType": "application/vnd.geo+json",
+        "feature": { "type": "Point", "coordinates": [37.6175, 55.7558] }
+      }
+    }
+```
+### 4. Настройка automations.yaml
+В файл automations.yaml добавить автоматизацию:
+```bash
+- id: ha_to_frost_temp_on_change
+  alias: "HA → FROST: температура (Datastream 1) on_change"
+  trigger:
+    - platform: state
+      entity_id: sensor.gw2000c_feels_like_temperature
+  condition:
+    - condition: template
+      value_template: >
+        {{ states('sensor.gw2000c_feels_like_temperature') not in ['unknown','unavailable','none'] }}
+  mode: queued
+  action:
+    - service: rest_command.send_temperature
+```
+** Теперь енобходимо переазпустить Home Assistant**
+### 5. Запуск автоматические отправки данных на сервер FROST
+В "Панели разработчика → Действия" найти rest_command.send_temperature и выполнить. Статус должен быть равен 201.
+
+### Проверка работоспособности автоматической отправки данных на сервер FROST
+
+**Методы проверки:**
+1. Проверка на сервере FROST:
+```bash
+http://<адрес_сервера>:8080/FROST-Server/v1.1/Datastreams(1)/Observations
+```
+Должны появиться значения
+
+2. Проверка логов сервера через SSH:
+```bash 
+docker logs <frost_container_name> --tail 50
+```
+Должны отобразиться строки: Created new Observation (id=1001)
+
+3. Проверка в Postman:
+Использовать тип запроса GET по необходимому адресу
+```bash
+http://<адрес_сервера>:8080/FROST-Server/v1.1/Observations
+```
+Проверить сущности на сервере
+
+Успешный статус: 201 Created
+Ответ содержит: @iot.id (уникальный идентификатор)
